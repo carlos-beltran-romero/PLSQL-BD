@@ -1,0 +1,83 @@
+---------------------------------------TRIGGERS---------------------------------------------
+
+-- TRIGGER QUE SE DISPARA AL ELIMINAR UN EQUIPO. MODIFIQUA EL ID DE EQUIPO DE TODOS LOS EMPLEADOS DE ESE EQUIPO Y DE LOS PROYECTOS EN LOS QUE ESTE
+
+CREATE OR REPLACE TRIGGER TRG_ELIMINAR_EQUIPO
+AFTER DELETE ON Equipo
+FOR EACH ROW
+DECLARE
+    max_id_equipo NUMBER(10);
+BEGIN
+  SELECT MAX(Equipo) INTO max_id_equipo FROM Empleado;
+  IF(:OLD.ID = max_id_equipo) THEN
+    UPDATE Proyecto SET Equipo =
+    (SELECT MAX(Equipo) FROM Empleado WHERE Equipo < max_id_equipo)
+    WHERE Equipo = :OLD.ID;
+
+    UPDATE Empleado SET Equipo =
+    (SELECT MAX(Equipo) FROM Empleado WHERE Equipo < max_id_equipo)
+    WHERE Equipo = :OLD.ID;
+    
+  ELSE
+    UPDATE Proyecto SET Equipo = max_id_equipo WHERE Equipo = :OLD.ID;
+    UPDATE Empleado SET Equipo = max_id_equipo WHERE Equipo = :OLD.ID;
+  END IF;
+END;
+/
+
+-- TRIGGER QUE SE DISPARA ANTES DE ELIMINAR UN CLIENTE. CUANDO SE DISPARA DA UN ERROR.
+
+CREATE OR REPLACE TRIGGER TRG_ELIMINAR_CLIENTE
+BEFORE DELETE ON Cliente
+FOR EACH ROW
+DECLARE
+    num_proyectos NUMBER(10);
+BEGIN
+  SELECT COUNT(*) INTO num_proyectos FROM Proyecto WHERE Cliente = :OLD.DNI;
+  IF(num_proyectos > 0) THEN
+    RAISE_APPLICATION_ERROR(-20000, 'No se puede eliminar el cliente porque tiene proyectos asociados');
+  END IF;
+END;
+/
+-- TRIGGER QUE SE DISPARA CUANDO SE MODIFICA LA COLUMNA CLIENTE DE LA TABLA PROYECTO. COMPRUEBA QUE EL CLIENTE EXISTA Y QUE NO SE INTENTE MODIFICAR A UN CLIENTE QUE NO EXISTE
+
+CREATE OR REPLACE TRIGGER TRG_MODIFICAR_CLIENTE_PROYECTO
+BEFORE UPDATE OF Cliente ON Proyecto
+FOR EACH ROW
+DECLARE
+    v_existe NUMBER(10);
+BEGIN
+  SELECT COUNT(*) INTO v_existe FROM Cliente WHERE DNI = :NEW.Cliente;
+  IF(v_existe = 0) THEN
+    RAISE_APPLICATION_ERROR(-20000, 'El cliente no existe');
+  END IF;
+END;
+/
+-- TRIGGER QUE SE DISPARA CUANDO SE MODIFICA LA COLUMNA FECHA PREVISTA DE LA TABLA PROYECTO. COMPRUEBA QUE LA FECHA SEA MAYOR A LA ACTUAL O SEA NULA
+
+CREATE OR REPLACE TRIGGER TRG_MODIFICAR_FECHA_PROYECTO
+BEFORE UPDATE OF Fecha_Finalizacion_Prevista ON Proyecto
+FOR EACH ROW
+DECLARE
+    v_fecha_actual DATE;
+BEGIN
+  SELECT SYSDATE INTO v_fecha_actual FROM DUAL;
+  IF(:NEW.Fecha_Finalizacion_Prevista < v_fecha_actual AND :NEW.Fecha_Finalizacion_Prevista IS NOT NULL) THEN
+    RAISE_APPLICATION_ERROR(-20000, 'La fecha prevista no puede ser anterior a la actual');
+  END IF;
+END;
+/
+-- TRIGGER QUE SE DISPARA CUANDO SE MODIFICA LA COLUMNA FECHA DE LA TABLA PROYECTO. COMPRUEBA QUE LA FECHA SEA MENOR O IGUAL A LA ACTUAL O SEA NULA
+
+CREATE OR REPLACE TRIGGER TRG_MODIFICAR_FECHA_FIN_PROYECTO
+BEFORE UPDATE OF Fecha_Finalizacion_Real ON Proyecto
+FOR EACH ROW
+DECLARE
+    v_fecha_actual DATE;
+BEGIN
+  SELECT SYSDATE INTO v_fecha_actual FROM DUAL;
+  IF(:NEW.Fecha_Finalizacion_Real > v_fecha_actual AND :NEW.Fecha_Finalizacion_Real IS NOT NULL) THEN
+    RAISE_APPLICATION_ERROR(-20000, 'La fecha de fin no puede ser posterior a la actual');
+  END IF;
+END;
+/
